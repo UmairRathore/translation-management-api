@@ -74,9 +74,9 @@ TranslationRepository::streamForExport
         │   ->join('translation_keys as tk', …)
         │   ->select('tk.key', 'tv.locale', 'tv.content')
         │   ->orderBy('tv.id')
-        │   ->lazyById(2000, 'tv.id', 'id')
+        │   ->cursor()
         ▼
-PostgreSQL — single indexed JOIN, keyset cursor
+PostgreSQL — single indexed JOIN, streaming cursor
 ```
 
 ### Why streaming
@@ -87,11 +87,12 @@ A naïve implementation loads all rows into memory before transforming. At 100k 
 - A second collection of nested arrays for grouping.
 - Peak memory in the tens of MB.
 
-The streaming approach uses Laravel's built-in `lazyById()`, which:
+The streaming approach uses Laravel's built-in `cursor()`, which:
 
-- Issues `SELECT … WHERE tv.id > $last ORDER BY tv.id LIMIT 2000` repeatedly — keyset pagination, no `OFFSET` cost.
+- Issues a single streaming query that fetches rows one at a time — no repeated queries, no `OFFSET` cost.
 - Returns plain `stdClass` rows from the query builder — no Eloquent overhead.
-- Yields rows one at a time through a `LazyCollection`, so the working set is bounded to one chunk regardless of table size.
+- Yields rows one at a time through a `LazyCollection`, so the working set is bounded regardless of table size.
+- lazyById was replaced with cursor because lazyById can generate multiple queries and degrade performance when used with joins.
 
 The service iterates the lazy collection once, building the locale-keyed map directly. The result is cached for 60 seconds, so subsequent requests skip the DB entirely.
 

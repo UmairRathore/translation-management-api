@@ -44,13 +44,14 @@ Each decision is captured with the option taken and the trade-off accepted.
 
 ## 4. Streaming export
 
-**Chosen:** query builder + `lazyById(2000)` instead of loading all rows or returning a streamed HTTP response.
+**Chosen:** query builder + `cursor()` instead of loading all rows or returning a streamed HTTP response.
 
 **Why:**
-- Keyset pagination over `tv.id` — no `OFFSET` performance cliff at 100k rows.
+- Single streaming query — no repeated queries, no `OFFSET` performance cliff at 100k rows.
 - `stdClass` rows skip Eloquent hydration cost (events, relations, mutators).
-- Bounded memory: at most 2,000 rows per chunk regardless of table size.
+- Bounded memory: rows are fetched one at a time regardless of table size.
 - The result is a plain PHP array, which is **cacheable**. A streaming HTTP response is not.
+- lazyById was replaced with cursor because lazyById can generate multiple queries and degrade performance when used with joins.
 
 **Trade-off:** the locale-keyed map is built in PHP. At very large scales (millions of rows) the array itself becomes the bottleneck. For the assignment's 100k target this is well below memory and time limits, and the cache layer eliminates repeated builds.
 
