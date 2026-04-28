@@ -66,6 +66,10 @@ class TranslationService
         return $this->translations->search($filters, $perPage);
     }
 
+    /**
+     * @param string|null $locale
+     * @return array
+     */
     public function export(?string $locale = null): array
     {
         $map = [];

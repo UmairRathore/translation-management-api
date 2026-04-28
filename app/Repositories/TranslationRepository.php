@@ -99,7 +99,7 @@ class TranslationRepository
             $query->where('tv.locale', $locale);
         }
 
-        return $query->orderBy('tv.id')->lazyById(2000, 'tv.id', 'id');
+        return $query->orderBy('tv.id')->cursor();
     }
 
     public function transaction(Closure $callback): mixed
