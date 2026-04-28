@@ -1,58 +1,173 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Translation Management API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A read-heavy translation management service built with Laravel 13, PostgreSQL, and a database cache layer.
 
-## About Laravel
+Manages translation keys across multiple locales, supports tagging and search, and exposes a fast JSON export endpoint suitable for client/CDN consumption.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> Demo: _Loom link placeholder — to be added._
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Stack
 
-## Learning Laravel
+- **PHP** 8.3+
+- **Laravel** 13
+- **PostgreSQL** (primary database)
+- **Database cache driver** (Redis-ready — see [Caching](#caching))
+- **Sanctum** for token authentication
+- **L5-Swagger** for OpenAPI docs
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+> **Swagger UI available at `/api/documentation` once the server is running.**
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Setup
 
 ```bash
-composer require laravel/boost --dev
+git clone <repo>
+cd translation-management-api
 
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Edit `.env`:
 
-## Contributing
+```
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=translation_management
+DB_USERNAME=postgres
+DB_PASSWORD=
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+CACHE_STORE=database
+```
 
-## Code of Conduct
+Create the database, then:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan migrate
+php artisan l5-swagger:generate
+php artisan serve
+```
 
-## Security Vulnerabilities
+Server runs at `http://localhost:8000`.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+## Seeding test data (100k+ records)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+To populate the database with 100,000 translation keys (each with `en` + `fr` values and 1–3 random tags), run:
+
+```bash
+php artisan db:seed --class=TranslationSeeder
+```
+
+The seeder uses chunked bulk inserts (1,000 keys per batch) and produces:
+
+| Table | Rows |
+|---|---|
+| `tags` | 10 |
+| `translation_keys` | 100,000 |
+| `translation_values` | 200,000 |
+| `translation_tag` | ~200,000 |
+
+Use this dataset to validate the `<500ms` export budget end-to-end on PostgreSQL.
+
+---
+
+## Running tests
+
+```bash
+php artisan test
+```
+
+Tests use SQLite in-memory and the `array` cache driver — nothing else needs to be running.
+
+---
+
+## API summary
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/auth/token` | public | Issue a Sanctum token |
+| `GET` | `/api/translations` | public | Search keys (`key`, `content`, `locale`, `tags[]`, `per_page`) |
+| `GET` | `/api/translations/export` | public | Locale-keyed JSON export, cached |
+| `GET` | `/api/translations/{key}` | public | Fetch a single key |
+| `POST` | `/api/translations` | sanctum | Create a key with locale values + tags |
+| `PUT` | `/api/translations/{key}` | sanctum | Update locale values and (optionally) tags |
+
+### Export response shape
+
+```json
+{
+  "en": { "welcome.title": "Welcome", "auth.login": "Sign in" },
+  "fr": { "welcome.title": "Bienvenue", "auth.login": "Connexion" }
+}
+```
+
+### Quick start
+
+Fetch the full export (no auth required):
+
+```bash
+curl http://localhost:8000/api/translations/export
+```
+
+Issue a token, then use it on write endpoints:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret"}'
+```
+
+Use the returned token as `Authorization: Bearer <token>` on POST/PUT.
+
+### Swagger UI
+
+Available at `http://localhost:8000/api/documentation`.
+Regenerate the spec after editing controller attributes:
+
+```bash
+php artisan l5-swagger:generate
+```
+
+---
+
+## Caching
+
+The export endpoint is cached at the controller layer with `Cache::remember(...)`, TTL 60 seconds.
+
+- **Cache key:** `translations.export.all` (no locale) or `translations.export.{locale}`.
+- **Backing store:** the `database` driver (Laravel `cache` table). Production-grade — works without extra infrastructure.
+- **Invalidation:** `Cache::flush()` is called after `POST` and `PUT` writes. Coarse but correct for this scope.
+
+**Switching to Redis** is a `.env` change only — no code change needed:
+
+```
+CACHE_STORE=redis
+```
+
+---
+
+## Performance notes
+
+- Export streams rows via `lazyById(2000)` over a single indexed JOIN — no N+1, no full-table model hydration.
+- Composite unique index `(translation_key_id, locale)` covers the join, point lookups, and the integrity guarantee.
+- Paginated search uses `whereHas` correlated subqueries over the indexed pivot for tag filtering.
+- A feature test asserts the cold-path export responds within 1000ms over 1k rows on SQLite; the warm path (cache hit) is essentially constant time.
+
+---
+
+## CDN considerations (theoretical)
+
+The export endpoint returns a self-contained JSON document with predictable cache keys per locale. In a production deployment it would sit behind a CDN with:
+
+- `Cache-Control: public, max-age=60, s-maxage=60` matching the application TTL.
+- A surrogate key per locale (`translations:en`, `translations:fr`) so writes can purge edge caches selectively.
+- Origin shielding so the application cache is hit at most once per region per minute.
+
+The application's existing 60-second TTL plus `Cache::flush()` on writes is consistent with this model — replace `flush()` with a tag-based purge if you adopt cache tagging.
