@@ -237,11 +237,20 @@ class TranslationController extends Controller
     )]
     public function export(Request $request): JsonResponse
     {
-        $locale = $request->string('locale')->toString() ?: null;
-        $cacheKey = 'translations.export.'.($locale ?: 'all');
+        // Large dataset export is constrained to a single locale to reduce payload size and improve encoding performance
+        $locale = $request->string('locale')->toString();
 
-        $data = Cache::remember($cacheKey, 60, fn () => $this->service->export($locale));
+        if (empty($locale)) {
+            return response()->json([
+                'error' => 'locale is required for export'
+            ], 422);
+        }
 
+        $cacheKey = 'translations.export.'.$locale;
+
+        $data = Cache::remember($cacheKey, 60, function () use ($locale) {
+            return $this->service->export($locale);
+        });
         return response()->json($data);
     }
 

@@ -70,14 +70,16 @@ class TranslationService
      * @param string|null $locale
      * @return array
      */
-    public function export(?string $locale = null): array
+    public function export(string $locale): array
     {
-        $map = [];
+        $translations = [];
 
         foreach ($this->translations->streamForExport($locale) as $row) {
-            $map[$row->locale][$row->key] = $row->content;
+            $translations[$row->key] = $row->content;
         }
 
-        return $map;
+        return [
+            $locale => $translations
+        ];
     }
 }
