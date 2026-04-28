@@ -155,7 +155,8 @@ CACHE_STORE=redis
 
 ## Performance notes
 
-- Export streams rows via `lazyById(2000)` over a single indexed JOIN — no N+1, no full-table model hydration.
+- Export streams rows via cursor-based streaming over a single indexed JOIN — no N+1, no full-table model hydration.
+- lazyById was replaced with cursor because lazyById can generate multiple queries and degrade performance when used with joins. cursor provides a single streaming query, which is more efficient for large datasets.
 - Composite unique index `(translation_key_id, locale)` covers the join, point lookups, and the integrity guarantee.
 - Paginated search uses `whereHas` correlated subqueries over the indexed pivot for tag filtering.
 - A feature test asserts the cold-path export responds within 1000ms over 1k rows on SQLite; the warm path (cache hit) is essentially constant time.
